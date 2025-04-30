@@ -55,9 +55,13 @@ $user = $result->fetch_assoc();
 // ✅ Log access to the user dashboard
 logSecurityEvent($conn, "Accessed user dashboard", $user_id);
 
+// Fetch messages and replies
+$query_messages = $conn->prepare("SELECT * FROM messages WHERE user_id = ?");
+$query_messages->bind_param("i", $user_id);
+$query_messages->execute();
+$messages_result = $query_messages->get_result();
+
 ?>
-
-
 
 <!DOCTYPE html>
 <html lang="en">
@@ -80,6 +84,27 @@ logSecurityEvent($conn, "Accessed user dashboard", $user_id);
             echo "<p>Account: " . $account['account_number'] . " - Balance: $" . $account['balance'] . "</p>";
         }
         ?>
+
+        <h3>Your Messages</h3>
+        <?php while ($message = $messages_result->fetch_assoc()) : ?>
+            <div class="message">
+                <p><strong>Message:</strong> <?php echo htmlspecialchars($message['message']); ?></p>
+
+                <!-- Check if there is a reply to this message -->
+                <?php
+                $message_id = $message['id'];
+                $replyQuery = $conn->prepare("SELECT * FROM message_replies WHERE message_id = ?");
+                $replyQuery->bind_param("i", $message_id);
+                $replyQuery->execute();
+                $replies_result = $replyQuery->get_result();
+                if ($reply = $replies_result->fetch_assoc()) {
+                    echo "<p><strong>Admin's Reply:</strong> " . htmlspecialchars($reply['reply_text']) . "</p>";
+                } else {
+                    echo "<p><strong>No reply from admin yet.</strong></p>";
+                }
+                ?>
+            </div>
+        <?php endwhile; ?>
 
         <h3>Actions</h3>
         <ul>
