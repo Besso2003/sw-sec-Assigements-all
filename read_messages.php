@@ -46,6 +46,25 @@ $query = $conn->prepare("SELECT * FROM messages LIMIT ? OFFSET ?");
 $query->bind_param("ii", $limit, $offset);
 $query->execute();
 $messages = $query->get_result();
+
+// Handle the reply submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reply'])) {
+    $message_id = $_POST['message_id'];
+    $reply = $_POST['reply'];
+
+    // Prepare statement to insert the reply into the database
+    $stmt = $conn->prepare("INSERT INTO message_replies (message_id, admin_id, reply_text) VALUES (?, ?, ?)");
+    $stmt->bind_param("iis", $message_id, $_SESSION['user_id'], $reply);
+    $stmt->execute();
+    $stmt->close();
+
+    logSecurityEvent($conn, "Admin replied to message ID: $message_id", $_SESSION['user_id']);
+
+    // Redirect to avoid re-posting the form on page refresh
+    header("Location: " . $_SERVER['REQUEST_URI']); // Reload the page
+    exit; // Prevent further code execution
+}
+
 ?>
 
 <!DOCTYPE html>
@@ -64,18 +83,38 @@ $messages = $query->get_result();
             <tr>
                 <th>User ID</th>
                 <th>Message</th>
+                <th>Reply</th>
             </tr>
             <?php while ($message = $messages->fetch_assoc()) : ?>
                 <tr>
                     <td><?php echo htmlspecialchars($message['user_id']); ?></td>
                     <td><?php echo htmlspecialchars($message['message']); ?></td>
+                    <td>
+                        <form action="read_messages.php" method="POST">
+                            <input type="hidden" name="message_id" value="<?php echo $message['id']; ?>">
+                            <textarea name="reply" placeholder="Enter reply..."></textarea>
+                            <button type="submit">Reply</button>
+                        </form>
+
+                        <!-- Displaying existing replies -->
+                        <h4>Replies:</h4>
+                        <?php
+                        $message_id = $message['id'];
+                        $replyQuery = $conn->prepare("SELECT * FROM message_replies WHERE message_id = ?");
+                        $replyQuery->bind_param("i", $message_id);
+                        $replyQuery->execute();
+                        $replies = $replyQuery->get_result();
+                        while ($reply = $replies->fetch_assoc()) {
+                            echo "<p><strong>Admin:</strong> " . htmlspecialchars($reply['reply_text']) . "</p>";
+                        }
+                        ?>
+                    </td>
                 </tr>
             <?php endwhile; ?>
         </table>
 
         <a href="admin_dashboard.php">Back to Dashboard</a>
     </div>
-
 </body>
 </html>
 
